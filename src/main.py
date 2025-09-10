@@ -3,10 +3,10 @@ import random
 import numpy as np
 import keras
 import tensorflow as tf
-tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[0], True)
+#tf.config.experimental.set_memory_growth(tf.config.list_physical_devices("GPU")[0], True)
 
 from src.model.model_utils import get_rotated_state
-from src.display.display import Display, GameQuit
+from src.display.display import Display
 from src.simulation.simulation import Simulation
 from src.simulation.board_generator import make_simple_board
 
@@ -26,22 +26,27 @@ from src.simulation.board_generator import make_simple_board
 #    print(model.predict(X))
 
 
+#def main() -> None:
+#    simulation = Simulation(calculate_score, False)
+#
+#    model = keras.models.load_model("models/r7_simple_64x3_rb_1_3_e_100000_lr_001_24_snapshot.keras")
+#    view_type = "simple"
+#
+#    display = Display()
+#    display.setup((1354, 1354))
+#
+#    while True:
+#        simulation.reset(make_simple_board(np.array([15, 15])), 2, 3, 2)
+#
+#        try:
+#            display.main_loop(simulation, model, view_type, 7, 3)
+#        except GameQuit:
+#            return
+
 def main() -> None:
-    simulation = Simulation(calculate_score, True)
-
-    model = keras.models.load_model("models/r7_simple_64x3_rb_1_3_e_100000_lr_001_23_snapshot.keras")
-    view_type = "simple"
-
     display = Display()
-    display.setup((1354, 1354))
-
-    while True:
-        simulation.reset(make_simple_board(np.array([15, 15])), 1, 1, 2)
-
-        try:
-            display.game_loop(simulation, model, view_type, 7, 8)
-        except GameQuit:
-            return
+    display.init_gui((1920, 1080))
+    display.main_loop()
 
 
 def calculate_score(ate_food: bool, died: bool) -> float:

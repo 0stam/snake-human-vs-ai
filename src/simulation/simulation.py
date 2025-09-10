@@ -2,6 +2,13 @@ from collections import deque
 from typing import Callable, Optional, Sequence
 from enum import Enum, IntEnum
 import random
+import logging
+
+logger = logging.getLogger("death_logger")
+logger.setLevel(logging.ERROR)
+std_handler = logging.StreamHandler()
+std_handler.setLevel(logging.DEBUG)
+logger.addHandler(std_handler)
 
 import numpy as np
 
@@ -20,6 +27,7 @@ Vector2 = tuple[int, int]
 
 
 VALID_DIRECTIONS = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+DIAGONAL_DIRECTIONS = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
 
 
 class Simulation:
@@ -36,6 +44,8 @@ class Simulation:
 
 
     def reset(self, board: np.ndarray, snake_count: int, food_count: int, tail_len: int) -> None:
+        if tail_len < 1:
+            raise ValueError("Usupported tail_len. It would cause errors in next()")
         self.board: np.ndarray = board
         
         self.snakes: list[deque[Vector2]] = []
@@ -47,11 +57,14 @@ class Simulation:
 
         self._snakes_alive = [True for _ in range(snake_count)]
         self.n_snakes_alive = snake_count
+        self.finish_on_n_snakes = 0 if snake_count == 1 else 1
         
         self._place_on_empty(Field.FOOD, food_count)
 
         if self.use_timeout:
             self._reset_timeout()
+
+        logger.debug("Game started")
 
 
     def next(self, moves: Sequence[Vector2]) -> tuple[Sequence[float], bool]:
@@ -84,9 +97,10 @@ class Simulation:
 
             snake.appendleft((head_x + move_x, head_y + move_y))
 
+            self.board[snake[1]] = Field.SNAKE_BODY  # Prevent snakes killing each other when one of them extends
+
             if self.board[snake[0]] == Field.FOOD:
                 ate_food[i] = True
-                self.board[snake[-1]] = Field.SNAKE_BODY  # Prevent snakes killing each other when one of them extends
             else:
                 self.board[snake.pop()] = Field.EMPTY
 
@@ -103,12 +117,12 @@ class Simulation:
                         continue
 
                     if colliding_snake[0] == snake[0]:
-                        self._clear_snake(j)
+                        logger.debug(f"{j} collided with other head, moved first")
                         died[j] = True
-                        break
+                        # Don't stop the search here, there can be many snakes on the same field
                 
                 # Kill current snake
-                self._clear_snake(i)
+                logger.debug(f"{i} collided with other head, moved second")
                 died[i] = True
 
                 continue
@@ -117,7 +131,7 @@ class Simulation:
                 missing_food += 1
             elif self.board[snake[0]] != Field.EMPTY: # Check if this snake dies
                 # Kill this snake
-                self._clear_snake(i)
+                logger.debug(f"{i} collided with {Field(self.board[snake[0]]).name}")
                 died[i] = True
 
                 continue
@@ -125,12 +139,13 @@ class Simulation:
             # Move snake forward
             self.board[snake[0]] = Field.SNAKE_HEAD
 
-            if len(snake) > 1:
-                self.board[snake[1]] = Field.SNAKE_BODY  # Overwrite previous head
+        for i, i_died in enumerate(died):
+            if i_died:
+                self._clear_snake(i, True)
 
         self._place_on_empty(Field.FOOD, missing_food)
 
-        game_running = self.n_snakes_alive > 0
+        game_running = self.n_snakes_alive > self.finish_on_n_snakes
 
         if self.use_timeout:
             if missing_food:
@@ -138,6 +153,7 @@ class Simulation:
 
             if self.turns_before_timeout <= 0:
                 game_running = False
+                logger.debug("Timeout")
 
             self.turns_before_timeout -= 1
         
@@ -166,6 +182,9 @@ class Simulation:
         
         if view_type == "simple":
             return self.get_snake_simple_view(snake_idx, view_range)
+
+        if view_type == "diagonal":
+            return self.get_snake_simple_view(snake_idx, view_range, True)
 
         raise ValueError("Invalid view_type")
 
@@ -216,7 +235,7 @@ class Simulation:
 
         return full_board_view
 
-    def get_snake_simple_view(self, snake_idx: int, view_range: int) -> np.ndarray:
+    def get_snake_simple_view(self, snake_idx: int, view_range: int, diagonal: bool=False) -> np.ndarray:
         if not self.snakes[snake_idx]:
             return np.array([])
 
@@ -230,6 +249,15 @@ class Simulation:
                     dir,
                     view_range
                 ))
+            
+            if diagonal:
+                for dir in DIAGONAL_DIRECTIONS:
+                    result.append(self._find_in_direction(
+                        snake_idx,
+                        Field(field_type),
+                        dir,
+                        view_range
+                    ))
 
         return np.array(result)
 
@@ -292,6 +320,8 @@ class Simulation:
             return [(positions[0][i], positions[1][i]) for i in range(len(positions[0]))]
 
     def _clear_snake(self, idx: int, clear_head: bool=False) -> None:
+        logger.debug("Clearning snake")
+
         snake = self.snakes[idx]
 
         assert snake
@@ -301,8 +331,10 @@ class Simulation:
 
         snake_iter = iter(snake)
 
-        if not clear_head:
-            next(snake_iter)
+        head = next(snake_iter)
+
+        if clear_head and self.board[head] == Field.SNAKE_HEAD:
+            self.board[head] = Field.EMPTY
 
         while True:
             try:
@@ -331,5 +363,5 @@ class Simulation:
         return max_distance
 
     def _reset_timeout(self):
-        self.turns_before_timeout = 80 + max(len(snake) for snake in self.snakes) * 10
+        self.turns_before_timeout = 80 + max(len(snake) for snake in self.snakes) * 20
 

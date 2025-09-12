@@ -6,10 +6,12 @@ import keras
 from src.model.model_utils import get_model_moves
 from src.simulation.simulation import Field, Simulation, Vector2
 from src.display.view import View
-from src.display.constants import EVENT_GAME_FINISHED, EVENT_HUMAN_STARTED, EVENT_NEXT_TURN
+from src.display.constants import EVENT_GAME_FINISHED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_NEXT_TURN, EVENT_POSSIBLE_HUMAN_TIMEOUT
 
 
 class GameView(View):
+    TIMEOUT_DURATION = 20_000
+
     COLOR_MAP = {
         Field.EMPTY: "black",
         Field.WALL: "gray",
@@ -27,6 +29,11 @@ class GameView(View):
 
     AI_SATURATION_MUL = 0.18
     AI_LIGHTNESS_MUL = 0.7
+
+    GAME_INPUT_KEYS = {
+        pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d,
+        pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT
+    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -54,6 +61,8 @@ class GameView(View):
 
         if self.game_started:
             pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
+        else:
+            pygame.time.set_timer(EVENT_POSSIBLE_HUMAN_TIMEOUT, self.TIMEOUT_DURATION)
 
         self.simulation_running = True
 
@@ -69,13 +78,19 @@ class GameView(View):
 
         if not self.game_started:
             if self.human_playing:
-                if any(event.type == pygame.KEYDOWN for event in events):
+                if any(
+                    event.type == pygame.KEYDOWN and event.key in self.GAME_INPUT_KEYS
+                    for event in events
+                ):
                     self.game_started = True
                     self._handle_human_moves(events)
 
                     pygame.event.post(pygame.Event(EVENT_NEXT_TURN))
                     pygame.event.post(pygame.Event(EVENT_HUMAN_STARTED))
                     pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
+
+                if any(event.type == EVENT_POSSIBLE_HUMAN_TIMEOUT for event in events):
+                    pygame.event.post(pygame.Event(EVENT_HUMAN_TIMEOUT))
 
             self.screen.blit(self.surface)
             return

@@ -10,7 +10,7 @@ import numpy as np
 
 from src.display.background import Background
 from src.display.text import Text, TextFactory
-from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAME_STARTED, EVENT_HUMAN_STARTED
+from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAME_STARTED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT
 from src.simulation.board_generator import make_simple_board
 from src.display.view import ParentView, View
 from src.display.game_view import GameView
@@ -19,7 +19,22 @@ from src.model.model_utils import get_model_moves
 
 
 class Display(ParentView):
-    PROMPT_TEXT = "Press any key to start"
+    PROMPT_IDLE = "Press any key to start"
+    PROMPT_MOVE = "WSAD / Arrows to move"
+
+    HUMAN_WON = "You won!"
+    AI_WON = "AI won!"
+    DRAW = "Draw!"
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        # TODO: implement file loading
+        self.total_human_score = 0
+        self.total_ai_score = 0
+
+        self.curr_human_score = 0
+        self.curr_ai_score = 0
 
     def init_gui(self, size: tuple[int, int]=(0,0)) -> None:
         super().init_gui()
@@ -50,11 +65,17 @@ class Display(ParentView):
         # Text
         self.text_factory = TextFactory(Path("assets/fonts/tiny5/Tiny5-Regular.ttf"), self.scale)
 
-        self.center_label: Text = self.text_factory.create(self.PROMPT_TEXT, "center", (0, 0), 80)
+        self.center_label: Text = self.text_factory.create(self.PROMPT_IDLE, "center", (0, 0), 80)
         self.add_view(self.center_label)
 
         self.bottom_label: Text = self.text_factory.create("", "bottom_center", (0, -100), 50)
         self.add_view(self.bottom_label)
+
+        self.human_score_label: Text = self.text_factory.create("", "top_left", (10, 10), 50)
+        self.add_view(self.human_score_label)
+
+        self.ai_score_label: Text = self.text_factory.create("", "top_right", (-10, 10), 50)
+        self.add_view(self.ai_score_label)
 
         # Start demo game
         self.human_playing = False
@@ -67,6 +88,16 @@ class Display(ParentView):
             if event.type == EVENT_GAME_FINISHED:
                 if self.human_playing:
                     pygame.time.set_timer(EVENT_GAME_STARTED, 2000, 1)
+
+                    simulation = self.game_view.simulation
+                    assert simulation
+
+                    if simulation.snakes_alive[0]:
+                        self._human_won()
+                    elif simulation.n_snakes_alive > 0:
+                        self._ai_won()
+                    else:
+                        self._draw()
                 else:
                     self._start_game()
                 continue
@@ -76,16 +107,22 @@ class Display(ParentView):
                 continue
 
             if not self.human_playing and event.type == pygame.KEYDOWN:
-                pygame.time.set_timer(EVENT_GAME_STARTED, 0)
-
                 self.human_playing = True
+
+                self._reset_curr_score()
                 self._start_game()
                 continue
 
             if event.type == EVENT_HUMAN_STARTED:
                 self.bottom_label.text = ""
 
+            if event.type == EVENT_HUMAN_TIMEOUT:
+                self.human_playing = False
+                self._start_game()
+
     def _start_game(self) -> None:
+        pygame.time.set_timer(EVENT_GAME_STARTED, 0)
+
         calculate_score = lambda x, y: 0
 
         simulation = Simulation(calculate_score, not self.human_playing)
@@ -93,48 +130,49 @@ class Display(ParentView):
         model = keras.models.load_model("models/r7_simple_rb_1_3_e_100000_lr_001_timeout_v2_186_snapshot.keras")
         view_type = "simple"
 
-        simulation.reset(make_simple_board(np.array([15, 15])), 1, 1, 2)
+        simulation.reset(make_simple_board(np.array([15, 15])), 2, 1, 2)
 
-        self.game_view.setup_game(simulation, self.human_playing, model, view_type, 7, 20)
+        self.game_view.setup_game(simulation, self.human_playing, model, view_type, 7, 5)
 
         if self.human_playing:
             self.center_label.text = ""
-            self.bottom_label.text = self.PROMPT_TEXT
+            self.bottom_label.text = self.PROMPT_MOVE
         else:
-            self.center_label.text = self.PROMPT_TEXT
+            self.center_label.text = self.PROMPT_IDLE
             self.bottom_label.text = ""
+            self._update_score_labels(False)
 
+    def _reset_curr_score(self):
+        self.curr_human_score = 0
+        self.curr_ai_score = 0
 
-#    def game_loop(self, simulation: Simulation, model: keras.Model, view_type: str, snake_view_range: int, fps: float) -> None:
-#        running = True
-#
-#        self.display(simulation)
-#        last_human_move = (0, 0)
-#
-#        while running:
-#            self.clock.tick(fps)
-#
-#            if pygame.event.get(pygame.QUIT):
-#                raise GameQuit()
-#
-#            keydown_events = pygame.event.get(pygame.KEYDOWN)
-#            pygame.event.pump()
-#
-#            for event in keydown_events:
-#                if event.key == pygame.K_SPACE:
-#                    running = False
-#
-#            last_human_move = simulation.previous_moves[0]
-#            moves = self._get_moves(simulation, model, view_type, snake_view_range, True, last_human_move, keydown_events)
-#
-#            _, sim_running = simulation.next(moves)
-#
-#            #input()
-#
-#            running &= sim_running
-#
-#            self.display(simulation)
+        self._update_score_labels(True)
 
+    def _human_won(self):
+        self.curr_human_score += 1
+        self.total_human_score += 1
+        self._update_score_labels(True)
 
+        self.center_label.text = self.HUMAN_WON
 
+    def _ai_won(self):
+        self.curr_ai_score += 1
+        self.total_ai_score += 1
+        self._update_score_labels(True)
+
+        self.center_label.text = self.AI_WON
+
+    def _draw(self):
+        self.center_label.text = self.DRAW
+
+    def _update_score_labels(self, current: bool):
+        if current:
+            human_sc = self.curr_human_score
+            ai_sc = self.curr_ai_score
+        else:
+            human_sc = self.total_human_score
+            ai_sc = self.total_ai_score
+
+        self.human_score_label.text = f"Human: {human_sc}"
+        self.ai_score_label.text = f"{ai_sc} :AI"
 

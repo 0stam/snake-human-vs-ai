@@ -1,8 +1,97 @@
+from collections import deque
+from math import floor, ceil
+
 import tensorflow as tf
 import keras
 import numpy as np
 
 from src.simulation.simulation import Vector2
+
+
+class ReplayBuffer:
+    def __init__(
+        self,
+        priority_size: int,
+        normal_size: int,
+        default_split: float = 0.2,
+        default_batch_size: int = 32,
+        threshold_decay: float = 0.3,
+        threshold_multiplier: float = 1.3
+    ):
+        self.priority_buffer = deque(maxlen=priority_size)
+        self.normal_buffer = deque(maxlen=normal_size)
+
+        self.default_split = default_split
+        self.default_batch_size = default_batch_size
+
+        self.loss_threshold = 0
+        self.threshold_decay = threshold_decay
+        self.threshold_multiplier = threshold_multiplier
+
+        self.last_priority_idxs = []
+        self.last_normal_idxs = []
+
+    def append(self, experience: tuple):
+        self.normal_buffer.append(experience)
+
+    def sample(self, split: float = -1, batch_size: int = -1):
+        if split < 1:
+            split = self.default_split
+
+        if batch_size < 1:
+            batch_size = self.default_batch_size
+
+        if len(self.priority_buffer) < batch_size * split:
+            split = 0
+
+        n_priority = ceil(split * batch_size)
+        n_normal = floor((1 - split) * batch_size)
+
+        batch = []
+
+        if n_priority:
+            idxs = np.random.randint(len(self.priority_buffer), size=n_priority)
+            batch += [self.priority_buffer[i] for i in idxs]
+            self.last_priority_idxs = idxs
+        else:
+            self.last_priority_idxs = []
+
+        if n_normal:
+            idxs = np.random.randint(len(self.normal_buffer), size=n_normal)
+            batch += [self.normal_buffer[i] for i in idxs]
+            self.last_normal_idxs = idxs
+        else:
+            self.last_normal_idxs = []
+            
+        return [
+            [experience[field_idx] for experience in batch]
+            for field_idx in range(6)
+        ]
+
+    def update_loss(self, losses: tf.Tensor, mean_loss: tf.Tensor):
+        self.loss_threshold *= 1 - self.threshold_decay
+        self.loss_threshold += self.threshold_decay * mean_loss
+
+        for i, priority_idx in enumerate(self.last_priority_idxs):
+            if losses[i] < self.loss_threshold * self.threshold_multiplier:
+                if priority_idx != -1:
+                    del self.priority_buffer[priority_idx]
+
+                self.last_priority_idxs[self.last_priority_idxs == priority_idx] = -1
+                self.last_priority_idxs[self.last_priority_idxs > priority_idx] -= 1
+
+        for i, normal_idx in enumerate(self.last_normal_idxs, start=len(self.last_priority_idxs)):
+            if losses[i] > self.loss_threshold * self.threshold_multiplier:
+                self.priority_buffer.append(self.normal_buffer[normal_idx])
+
+    def clear(self):
+        self.priority_buffer.clear()
+        self.normal_buffer.clear()
+
+        self.loss_threshold = 0
+
+        self.last_normal_idxs = []
+        self.last_priority_idxs = []
 
 
 # By default model faces right

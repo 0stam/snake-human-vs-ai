@@ -99,7 +99,7 @@ class Display(ParentView):
                     else:
                         self._draw()
                 else:
-                    self._start_game()
+                    pygame.time.set_timer(EVENT_GAME_STARTED, 1500, 1)
                 continue
 
             if event.type == EVENT_GAME_STARTED:
@@ -123,16 +123,17 @@ class Display(ParentView):
     def _start_game(self) -> None:
         pygame.time.set_timer(EVENT_GAME_STARTED, 0)
 
-        calculate_score = lambda x, y: 0
+        calculate_score = lambda x, y, z: 0
 
         simulation = Simulation(calculate_score, not self.human_playing)
 
-        model = keras.models.load_model("models/r7_simple_rb_1_3_e_100000_lr_001_timeout_v2_186_snapshot.keras")
-        view_type = "simple"
+        model = keras.models.load_model("models/r15_full_rb_1_3_e_100000_lr_0_001_timeout_conv_battle_v0_57_snapshot.keras")
+        view_type = "full"
+        view_range = 15
 
-        simulation.reset(make_simple_board(np.array([15, 15])), 2, 1, 2)
+        simulation.reset(make_simple_board(np.array([15, 15])), 2, 2, 2)
 
-        self.game_view.setup_game(simulation, self.human_playing, model, view_type, 7, 5)
+        self.game_view.setup_game(simulation, self.human_playing, model, view_type, view_range, 6)
 
         if self.human_playing:
             self.center_label.text = ""

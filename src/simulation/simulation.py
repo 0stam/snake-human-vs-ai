@@ -31,13 +31,13 @@ DIAGONAL_DIRECTIONS = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
 
 
 class Simulation:
-    def __init__(self, calculate_score: Callable[[bool, bool], float], use_timeout: bool=False) -> None:
+    def __init__(self, calculate_score: Callable[[bool, bool, int], float], use_timeout: bool=False) -> None:
         """
         Creates the simulation object, but doesn't create any game-related data.
         To start a game, use reset()
 
         Args:
-            calculate_score (Callable[[bool, bool], float]): function that gives a score for a given state with args (snake_ate_food, snake_died)
+            calculate_score (Callable[[bool, bool, int], float]): function that gives a score for a given state with args (snake_ate_food, snake_died, n_snakes_killed)
         """
         self.calculate_score = calculate_score
         self.use_timeout = use_timeout
@@ -72,6 +72,7 @@ class Simulation:
 
         ate_food: list[bool] = [False for _ in self.snakes]
         died: list[bool] = [False for _ in self.snakes]
+        n_snakes_killed = [0 for _ in self.snakes]
 
         missing_food = 0
 
@@ -134,6 +135,18 @@ class Simulation:
                 logger.debug(f"{i} collided with {Field(self.board[snake[0]]).name}")
                 died[i] = True
 
+                if self.board[snake[0]] == Field.SNAKE_BODY:
+                    for j, colliding_snake in enumerate(self.snakes):
+                        if snake[0] in colliding_snake:
+                            if i == j:
+                                continue
+
+                            logger.debug(f"Killer {j}")
+                            n_snakes_killed[j] += 1
+                            break
+                    else:
+                        logger.debug("Snake killed itself")
+
                 continue
             
             # Move snake forward
@@ -157,7 +170,7 @@ class Simulation:
 
             self.turns_before_timeout -= 1
         
-        return [self.calculate_score(a, d) for a, d in zip(ate_food, died)], game_running
+        return [self.calculate_score(a, d, n) for a, d, n in zip(ate_food, died, n_snakes_killed)], game_running
 
     def get_snake_view(self, snake_idx: int, view_type: str, view_range: int = 0):
         """
@@ -169,6 +182,7 @@ class Simulation:
                 "centered": part of the board of size view_range * 2 + 1, centered on snake's head
                 "full": full board
                 "simple": series of distances up to view_range in directions [right, down, left, up] to different field types. If the distance exceeds the view_range, than view_range is returned.
+                "diagonal": same as simple, but the directions are [right, down, left, up, right-down, down-left, left-up, up-right]
         """
 
         if view_type == "full":

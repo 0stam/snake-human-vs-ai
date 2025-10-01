@@ -62,7 +62,7 @@ class GameView(View):
         if self.game_started:
             pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
         else:
-            pygame.time.set_timer(EVENT_POSSIBLE_HUMAN_TIMEOUT, self.TIMEOUT_DURATION)
+            pygame.time.set_timer(EVENT_POSSIBLE_HUMAN_TIMEOUT, self.TIMEOUT_DURATION, 1)
 
         self.simulation_running = True
 
@@ -78,19 +78,21 @@ class GameView(View):
 
         if not self.game_started:
             if self.human_playing:
-                if any(
-                    event.type == pygame.KEYDOWN and event.key in self.GAME_INPUT_KEYS
-                    for event in events
-                ):
-                    self.game_started = True
-                    self._handle_human_moves(events)
+                for event in events:
+                    if event.type == pygame.KEYDOWN and event.key in self.GAME_INPUT_KEYS:
+                        self.game_started = True
+                        self._handle_human_moves(events)
 
-                    pygame.event.post(pygame.Event(EVENT_NEXT_TURN))
-                    pygame.event.post(pygame.Event(EVENT_HUMAN_STARTED))
-                    pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
+                        pygame.event.post(pygame.Event(EVENT_NEXT_TURN))
+                        pygame.event.post(pygame.Event(EVENT_HUMAN_STARTED))
+                        pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
 
-                if any(event.type == EVENT_POSSIBLE_HUMAN_TIMEOUT for event in events):
-                    pygame.event.post(pygame.Event(EVENT_HUMAN_TIMEOUT))
+                    if event.type == EVENT_POSSIBLE_HUMAN_TIMEOUT:
+                        pygame.event.post(pygame.Event(EVENT_HUMAN_TIMEOUT))
+
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        pygame.event.post(pygame.Event(EVENT_HUMAN_TIMEOUT))
+                        pygame.time.set_timer(EVENT_POSSIBLE_HUMAN_TIMEOUT, 0)
 
             self.screen.blit(self.surface)
             return

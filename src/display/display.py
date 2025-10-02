@@ -34,8 +34,10 @@ class Display(ParentView):
 
     NEW_GAME_WAIT_TIME = 2000
 
-    def __init__(self) -> None:
+    def __init__(self, model_config: dict[str, dict]) -> None:
         super().__init__()
+
+        self.model_config = model_config
 
         # TODO: implement file loading
         self.total_human_score = 0
@@ -45,6 +47,11 @@ class Display(ParentView):
         self.curr_ai_score = 0
 
         self.max_curr_score = 1
+
+        self.ai_model_name = "demo"
+        self.curr_model_name = "normal"
+        self.model = None
+        self.loaded_model_filename = ""
 
     def init_gui(self, size: tuple[int, int]=(0,0)) -> None:
         super().init_gui()
@@ -137,21 +144,30 @@ class Display(ParentView):
                 self._start_game()
 
     def _start_game(self) -> None:
+        if self.human_playing:
+            config = self.model_config[self.curr_model_name]
+        else:
+            config = self.model_config[self.ai_model_name]
+
         pygame.time.set_timer(EVENT_GAME_STARTED, 0)
 
         calculate_score = lambda x, y, z: 0
 
         simulation = Simulation(calculate_score, not self.human_playing)
 
-        model = keras.models.load_model("models/r15_diagonal_rb_1_3_e_100000_lr_0_001_timeout_scaling_battle_big_aggresive_v0_86_snapshot.keras")
-        view_type = "diagonal"
-        view_range = 15
+        if self.loaded_model_filename != config["file"]:
+            self.model = keras.models.load_model(Path("models") / config["file"])
+            self.loaded_model_filename = config["file"]
+
+        view_type = config["view_type"]
+        view_range = config["view_range"]
+        fps = config["fps"]
 
         self.max_curr_score = 3
 
-        simulation.reset(make_simple_board(np.array([15, 15])), 2, 2, 2)
+        simulation.reset(make_simple_board(np.array([15, 15])), config["snake_count"], config["food_count"], 2)
 
-        self.game_view.setup_game(simulation, self.human_playing, model, view_type, view_range, 4)
+        self.game_view.setup_game(simulation, self.human_playing, self.model, view_type, view_range, fps)
 
         if self.human_playing:
             self.center_label.text = ""
@@ -175,6 +191,7 @@ class Display(ParentView):
             self.total_human_score += 1
             self.center_label.text = self.HUMAN_WON
             pygame.time.set_timer(EVENT_HUMAN_TIMEOUT, self.NEW_GAME_WAIT_TIME, 1)
+            pygame.time.set_timer(EVENT_GAME_STARTED, 0)
         else:
             self.center_label.text = self.HUMAN_SCORED
 
@@ -186,6 +203,7 @@ class Display(ParentView):
             self.total_ai_score += 1
             self.center_label.text = self.AI_WON
             pygame.time.set_timer(EVENT_HUMAN_TIMEOUT, self.NEW_GAME_WAIT_TIME, 1)
+            pygame.time.set_timer(EVENT_GAME_STARTED, 0)
         else:
             self.center_label.text = self.AI_SCORED
 

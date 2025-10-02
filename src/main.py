@@ -1,3 +1,4 @@
+import json
 import random
 
 import numpy as np
@@ -44,8 +45,14 @@ from src.simulation.board_generator import make_simple_board
 #            return
 
 def main() -> None:
-    display = Display()
-    display.init_gui((1920, 1080))
+    with open("assets/config/model_config.json") as f:
+        model_config = json.load(f)
+
+    if not model_config:
+        raise RuntimeError("Couldn't load model_config.json")
+
+    display = Display(model_config)
+    display.init_gui((0, 0))
     display.main_loop()
 
 

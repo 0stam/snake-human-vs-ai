@@ -1,4 +1,5 @@
 from collections import deque
+from itertools import islice
 
 import pygame
 import keras
@@ -6,7 +7,7 @@ import keras
 from src.model.model_utils import get_model_moves
 from src.simulation.simulation import Field, Simulation, Vector2
 from src.display.view import View
-from src.display.constants import EVENT_GAME_FINISHED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_NEXT_TURN, EVENT_POSSIBLE_HUMAN_TIMEOUT
+from src.display.constants import EVENT_GAME_FINISHED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_TICK, EVENT_POSSIBLE_HUMAN_TIMEOUT
 
 
 class GameView(View):
@@ -38,7 +39,7 @@ class GameView(View):
     def __init__(self) -> None:
         super().__init__()
 
-        self.simulation = None
+        self.simulation: Simulation = None
 
     def init_gui(self) -> None:
         super().init_gui()
@@ -48,25 +49,29 @@ class GameView(View):
         self.size = self.screen.size
 
 
-    def setup_game(self, simulation: Simulation, human_playing: bool, model: keras.Model, view_type: str, snake_view_range: int, fps: float) -> None:
+    def setup_game(self, simulation: Simulation, human_playing: bool, model: keras.Model, view_type: str, snake_view_range: int, turns_per_second: float, ticks_per_turn: int) -> None:
         self.simulation = simulation
         self.human_playing = human_playing
         self.model = model
         self.view_type = view_type
         self.snake_view_range = snake_view_range
-        self.frame_time = int(1000 / fps)
+        self.ticks_per_turn = ticks_per_turn
+        self.tick_time = int(1000 / (turns_per_second * ticks_per_turn))
+        self.ticks_remaining = 1
+
+        self.previous_snakes: list[list|deque] = [list(s)[1:] for s in simulation.snakes]
 
         self.game_started = not human_playing
         self.input_queue: deque[Vector2] = deque(maxlen=2)
 
         if self.game_started:
-            pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
+            pygame.time.set_timer(EVENT_TICK, self.tick_time)
         else:
             pygame.time.set_timer(EVENT_POSSIBLE_HUMAN_TIMEOUT, self.TIMEOUT_DURATION, 1)
 
         self.simulation_running = True
 
-        self._display(self.simulation)
+        self._display(self.simulation, 1)
 
 
     def process(self, delta: float, events: list[pygame.Event]) -> None:
@@ -83,9 +88,10 @@ class GameView(View):
                         self.game_started = True
                         self._handle_human_moves(events)
 
-                        pygame.event.post(pygame.Event(EVENT_NEXT_TURN))
+                        pygame.event.post(pygame.Event(EVENT_TICK))
+
                         pygame.event.post(pygame.Event(EVENT_HUMAN_STARTED))
-                        pygame.time.set_timer(EVENT_NEXT_TURN, self.frame_time)
+                        pygame.time.set_timer(EVENT_TICK, self.tick_time)
 
                     if event.type == EVENT_POSSIBLE_HUMAN_TIMEOUT:
                         pygame.event.post(pygame.Event(EVENT_HUMAN_TIMEOUT))
@@ -99,9 +105,16 @@ class GameView(View):
 
         self._handle_human_moves(events)
 
-        if not any(event.type == EVENT_NEXT_TURN for event in events):
+        for event in events:
+            if event.type == EVENT_TICK:
+                self.ticks_remaining -= 1
+
+        if self.ticks_remaining > 0:
+            self._display(self.simulation, (self.ticks_per_turn - self.ticks_remaining) / (self.ticks_per_turn - 1))
             self.screen.blit(self.surface)
             return
+
+        self.ticks_remaining = self.ticks_per_turn
 
         moves = []
 
@@ -113,6 +126,8 @@ class GameView(View):
 
         moves += self._get_ai_moves(self.human_playing)
 
+        self.previous_snakes = [deque(s) for s in self.simulation.snakes]
+
         _, sim_running = self.simulation.next(moves)
 
         if self.human_playing and not self.simulation.snakes_alive[0]:
@@ -123,10 +138,10 @@ class GameView(View):
 
         self.simulation_running = sim_running
 
-        self._display(self.simulation)
+        self._display(self.simulation, 0)
         self.screen.blit(self.surface)
 
-    def _display(self, simulation) -> None:
+    def _display(self, simulation: Simulation, trans_perc: float) -> None:
         self.surface.fill((0, 0, 0, 0))
 
         n_tiles_x = simulation.board.shape[0]
@@ -198,34 +213,71 @@ class GameView(View):
                 )
 
         # Draw snakes
-        for snake, (head_color, body_color) in zip(simulation.snakes, snake_colors):
+        for snake, previous_snake, (head_color, body_color) in zip(simulation.snakes, self.previous_snakes, snake_colors):
             if not snake:
                 continue
 
-            offset_iter = iter(snake)
-            head_x, head_y = next(offset_iter)
+            snake_len = len(snake)
 
-            for (x1, y1), (x2, y2) in zip(snake, offset_iter):
-                x1, x2 = sorted((x1, x2))
-                y1, y2 = sorted((y1, y2))
+            curr_iter = islice(snake, 1, len(snake) - 1)
+            prev_iter = islice(previous_snake, 1, len(snake) - 1)
 
-                x_start = margin_x + snake_offset + x1 * tile_size
-                y_start = margin_y + snake_offset + y1 * tile_size
+            for pos1, pos2 in zip(curr_iter, prev_iter):
+                self._draw_snake_segment(pos1, pos2, margin_x, margin_y, tile_size, snake_size, snake_offset, body_color)
 
-                x_size = snake_size if x2 - x1 == 0 else 2 * (snake_size + snake_offset)
-                y_size = snake_size if y2 - y1 == 0 else 2 * (snake_size + snake_offset)
+            # Draw tail
 
-                pygame.draw.rect(
-                    self.surface,
-                    body_color,
-                    [x_start, y_start, x_size, y_size]
-                )
+            prev_tail_x, prev_tail_y = previous_snake[-1]
+            curr_tail_x, curr_tail_y = snake[-1]
+
+            tail_diff_x = (curr_tail_x - prev_tail_x) * trans_perc
+            tail_diff_y = (curr_tail_y - prev_tail_y) * trans_perc
+
+            prev_tail_x += tail_diff_x
+            prev_tail_y += tail_diff_y
+
+            self._draw_snake_segment(snake[-1], (prev_tail_x, prev_tail_y), margin_x, margin_y, tile_size, snake_size, snake_offset, body_color)
+
+            # Draw head
+
+            prev_head_x, prev_head_y = previous_snake[0]
+            curr_head_x, curr_head_y = snake[0]
+
+            head_diff_x = (curr_head_x - prev_head_x) * trans_perc
+            head_diff_y = (curr_head_y - prev_head_y) * trans_perc
+
+            curr_head_x = prev_head_x + head_diff_x
+            curr_head_y = prev_head_y + head_diff_y
+
+            self._draw_snake_segment(previous_snake[0], (curr_head_x, curr_head_y), margin_x, margin_y, tile_size, snake_size, snake_offset, body_color)
 
             pygame.draw.rect(
                 self.surface,
                 head_color,
-                [margin_x + snake_offset + head_x * tile_size, margin_y + snake_offset + head_y * tile_size, snake_size, snake_size]
+                [margin_x + snake_offset + curr_head_x * tile_size, margin_y + snake_offset + curr_head_y * tile_size, snake_size, snake_size]
             )
+
+            self.surface = self.surface.convert_alpha()
+
+    def _draw_snake_segment(self, pos1: Vector2, pos2: Vector2, margin_x: int, margin_y: int, tile_size: int, snake_size: int, snake_offset: int, color: pygame.Color):
+        x1, y1 = pos1
+        x2, y2 = pos2
+
+        x1, x2 = sorted((x1, x2))
+        y1, y2 = sorted((y1, y2))
+
+        x_start = round(margin_x + snake_offset + x1 * tile_size)
+        y_start = round(margin_y + snake_offset + y1 * tile_size)
+
+        x_size = round(snake_size if x2 - x1 == 0 else snake_size + (x2 - x1) * (snake_size + snake_offset * 2))
+        y_size = round(snake_size if y2 - y1 == 0 else snake_size + (y2 - y1) * (snake_size + snake_offset * 2))
+
+        pygame.draw.rect(
+            self.surface,
+            color,
+            [x_start, y_start, x_size, y_size]
+        )
+
 
     def _handle_human_moves(self, events: list[pygame.Event]) -> None:
         actual_last_move = self.simulation.previous_moves[0]

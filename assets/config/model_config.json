@@ -5,7 +5,8 @@
         "view_range": 15,
         "snake_count": 3,
         "food_count": 2,
-        "fps": 12
+        "fps": 10,
+        "tps": 60
     },
     "normal": {
         "file": "r15_diagonal_rb_1_3_e_100000_lr_0_001_timeout_scaling_battle_big_aggresive_v0_86_snapshot.keras",
@@ -13,6 +14,7 @@
         "view_range": 15,
         "snake_count": 2,
         "food_count": 2,
-        "fps": 4
+        "fps": 4,
+        "tps": 25
     }
 }

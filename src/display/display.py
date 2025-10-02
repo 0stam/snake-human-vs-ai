@@ -2,6 +2,7 @@ from itertools import product
 from pathlib import Path
 import random
 import time
+from math import ceil
 
 import pygame
 from pygame.event import Event
@@ -62,9 +63,9 @@ class Display(ParentView):
             screen_info = pygame.display.Info()
             size = (screen_info.current_w, screen_info.current_h)
 
-            self.screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
+            self.screen = pygame.display.set_mode(size, pygame.FULLSCREEN, vsync=1)
         else:
-            self.screen = pygame.display.set_mode(size)
+            self.screen = pygame.display.set_mode(size, vsync=1)
 
         self.size = size
 
@@ -167,7 +168,7 @@ class Display(ParentView):
 
         simulation.reset(make_simple_board(np.array([15, 15])), config["snake_count"], config["food_count"], 2)
 
-        self.game_view.setup_game(simulation, self.human_playing, self.model, view_type, view_range, fps)
+        self.game_view.setup_game(simulation, self.human_playing, self.model, view_type, view_range, fps, ceil(config["tps"] / fps))
 
         if self.human_playing:
             self.center_label.text = ""

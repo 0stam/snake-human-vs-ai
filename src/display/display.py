@@ -22,9 +22,17 @@ class Display(ParentView):
     PROMPT_IDLE = "Press any key to start"
     PROMPT_MOVE = "WSAD / Arrows to move"
 
-    HUMAN_WON = "You won!"
-    AI_WON = "AI won!"
+    CHR_FILLED_POINT = u"\u25CF"
+    CHR_EMPTY_POINT = u"\u25CB"
+
+    HUMAN_SCORED = "You won!"
+    AI_SCORED = "AI won!"
     DRAW = "Draw!"
+
+    HUMAN_WON = "You're still better than AI!"
+    AI_WON = "AI took your job!"
+
+    NEW_GAME_WAIT_TIME = 2000
 
     def __init__(self) -> None:
         super().__init__()
@@ -35,6 +43,8 @@ class Display(ParentView):
 
         self.curr_human_score = 0
         self.curr_ai_score = 0
+
+        self.max_curr_score = 1
 
     def init_gui(self, size: tuple[int, int]=(0,0)) -> None:
         super().init_gui()
@@ -74,8 +84,14 @@ class Display(ParentView):
         self.human_score_label: Text = self.text_factory.create("", "top_left", (10, 10), 50)
         self.add_view(self.human_score_label)
 
+        self.human_score_label_lower: Text = self.text_factory.create("", "top_left", (10, 60), 60)
+        self.add_view(self.human_score_label_lower)
+
         self.ai_score_label: Text = self.text_factory.create("", "top_right", (-10, 10), 50)
         self.add_view(self.ai_score_label)
+
+        self.ai_score_label_lower: Text = self.text_factory.create("", "top_right", (-10, 60), 60)
+        self.add_view(self.ai_score_label_lower)
 
         # Start demo game
         self.human_playing = False
@@ -87,7 +103,7 @@ class Display(ParentView):
         for event in events:
             if event.type == EVENT_GAME_FINISHED:
                 if self.human_playing:
-                    pygame.time.set_timer(EVENT_GAME_STARTED, 2000, 1)
+                    pygame.time.set_timer(EVENT_GAME_STARTED, self.NEW_GAME_WAIT_TIME, 1)
 
                     simulation = self.game_view.simulation
                     assert simulation
@@ -127,13 +143,15 @@ class Display(ParentView):
 
         simulation = Simulation(calculate_score, not self.human_playing)
 
-        model = keras.models.load_model("models/r15_full_rb_1_3_e_100000_lr_0_001_timeout_conv_battle_v0_57_snapshot.keras")
-        view_type = "full"
+        model = keras.models.load_model("models/r15_diagonal_rb_1_3_e_100000_lr_0_001_timeout_scaling_battle_big_aggresive_v0_86_snapshot.keras")
+        view_type = "diagonal"
         view_range = 15
+
+        self.max_curr_score = 3
 
         simulation.reset(make_simple_board(np.array([15, 15])), 2, 2, 2)
 
-        self.game_view.setup_game(simulation, self.human_playing, model, view_type, view_range, 6)
+        self.game_view.setup_game(simulation, self.human_playing, model, view_type, view_range, 4)
 
         if self.human_playing:
             self.center_label.text = ""
@@ -151,17 +169,25 @@ class Display(ParentView):
 
     def _human_won(self):
         self.curr_human_score += 1
-        self.total_human_score += 1
         self._update_score_labels(True)
 
-        self.center_label.text = self.HUMAN_WON
+        if self.curr_human_score >= self.max_curr_score:
+            self.total_human_score += 1
+            self.center_label.text = self.HUMAN_WON
+            pygame.time.set_timer(EVENT_HUMAN_TIMEOUT, self.NEW_GAME_WAIT_TIME, 1)
+        else:
+            self.center_label.text = self.HUMAN_SCORED
 
     def _ai_won(self):
         self.curr_ai_score += 1
-        self.total_ai_score += 1
         self._update_score_labels(True)
-
-        self.center_label.text = self.AI_WON
+        
+        if self.curr_ai_score >= self.max_curr_score:
+            self.total_ai_score += 1
+            self.center_label.text = self.AI_WON
+            pygame.time.set_timer(EVENT_HUMAN_TIMEOUT, self.NEW_GAME_WAIT_TIME, 1)
+        else:
+            self.center_label.text = self.AI_SCORED
 
     def _draw(self):
         self.center_label.text = self.DRAW
@@ -170,10 +196,16 @@ class Display(ParentView):
         if current:
             human_sc = self.curr_human_score
             ai_sc = self.curr_ai_score
-        else:
-            human_sc = self.total_human_score
-            ai_sc = self.total_ai_score
 
-        self.human_score_label.text = f"Human: {human_sc}"
-        self.ai_score_label.text = f"{ai_sc} :AI"
+            self.human_score_label.text = "Human"
+            self.human_score_label_lower.text = self.CHR_FILLED_POINT * human_sc + self.CHR_EMPTY_POINT * (self.max_curr_score - human_sc)
+
+            self.ai_score_label.text = "AI"
+            self.ai_score_label_lower.text = self.CHR_EMPTY_POINT * (self.max_curr_score - ai_sc) + self.CHR_FILLED_POINT * ai_sc 
+        else:
+            self.human_score_label.text = f"Human: {self.total_human_score}"
+            self.ai_score_label.text = f"{self.total_ai_score} :AI"
+
+            self.human_score_label_lower.text = ""
+            self.ai_score_label_lower.text = ""
 

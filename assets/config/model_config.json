@@ -13,6 +13,6 @@
         "view_range": 15,
         "snake_count": 2,
         "food_count": 2,
-        "fps": 5
+        "fps": 4
     }
 }

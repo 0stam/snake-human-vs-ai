@@ -1,6 +1,6 @@
 from collections import deque
 from typing import Callable, Optional, Sequence
-from enum import Enum, IntEnum
+from enum import IntEnum
 import random
 import logging
 

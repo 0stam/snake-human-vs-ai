@@ -164,7 +164,7 @@ class Display(ParentView):
         view_range = config["view_range"]
         fps = config["fps"]
 
-        self.max_curr_score = 3
+        self.max_curr_score = 2
 
         simulation.reset(make_simple_board(np.array([15, 15])), config["snake_count"], config["food_count"], 2)
 

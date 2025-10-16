@@ -31,13 +31,15 @@ DIAGONAL_DIRECTIONS = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
 
 
 class Simulation:
-    def __init__(self, calculate_score: Callable[[bool, bool, int], float], use_timeout: bool=False) -> None:
+    def __init__(self, calculate_score: Callable[["Simulation", bool, bool, int, int, int], float], use_timeout: bool=False) -> None:
         """
         Creates the simulation object, but doesn't create any game-related data.
         To start a game, use reset()
 
         Args:
-            calculate_score (Callable[[bool, bool, int], float]): function that gives a score for a given state with args (snake_ate_food, snake_died, n_snakes_killed)
+            calculate_score (Callable[[Simulation, bool, bool, int, int, int], float]): function that gives a score for a given state with args (snake_ate_food, snake_died, n_snakes_killed, food_progress, snake_progress), where:
+                food_progress: sum of distance moved towards food on board minus sum of distance moved away from food
+                snake_progress: sum of distance moved towards enemies facing this snake
         """
         self.calculate_score = calculate_score
         self.use_timeout = use_timeout
@@ -54,6 +56,7 @@ class Simulation:
         self._place_snakes(snake_count, tail_len)
 
         self.food_count: int = food_count
+        self.tail_len: int = tail_len
 
         self._snakes_alive = [True for _ in range(snake_count)]
         self.n_snakes_alive = snake_count
@@ -73,8 +76,13 @@ class Simulation:
         ate_food: list[bool] = [False for _ in self.snakes]
         died: list[bool] = [False for _ in self.snakes]
         n_snakes_killed = [0 for _ in self.snakes]
+        food_progress = [0 for _ in self.snakes]
+        snake_progress = [0 for _ in self.snakes]
 
         missing_food = 0
+
+        # Save food positions for score calculations
+        food_xs, food_ys = np.where(self.board == Field.FOOD)
 
         # Calculate where snakes are going
         # If snake is not eating an apple, remove it's tail so snakes can go there
@@ -83,6 +91,39 @@ class Simulation:
                 continue
 
             assert move != (0, 0)
+
+            # SCORING: calculate food_progress
+            for food_x, food_y in zip(food_xs, food_ys):
+                if move[0]:
+                    if move[0] > 0:
+                        food_progress[i] += 1 if food_x > snake[0][0] else -1
+                    else:
+                        food_progress[i] += 1 if food_x < snake[0][0] else -1
+                else:
+                    if move[1] > 0:
+                        food_progress[i] += 1 if food_y > snake[0][1] else -1
+                    else:
+                        food_progress[i] += 1 if food_y < snake[0][1] else -1
+
+            # SCORING: calculate snake_progress
+            for j, other in enumerate(self.snakes):
+                if i == j:
+                    continue
+
+                if moves[j][0]:
+                    if moves[j][0] > 0:
+                        if snake[0][0] > other[0][0] and move[0] < 0:
+                            snake_progress[i] += 1
+                    else:
+                        if snake[0][0] < other[0][0] and move[0] > 0:
+                            snake_progress[i] += 1
+                if moves[j][1]:
+                    if moves[j][1] > 0:
+                        if snake[0][1] > other[0][1] and move[1] < 0:
+                            snake_progress[i] += 1
+                    else:
+                        if snake[0][1] < other[0][1] and move[1] > 0:
+                            snake_progress[i] += 1
 
             head_x, head_y = snake[0]
             move_x, move_y = move
@@ -170,7 +211,7 @@ class Simulation:
 
             self.turns_before_timeout -= 1
         
-        return [self.calculate_score(a, d, n) for a, d, n in zip(ate_food, died, n_snakes_killed)], game_running
+        return [self.calculate_score(self, a, d, n, f, s) for a, d, n, f, s in zip(ate_food, died, n_snakes_killed, food_progress, snake_progress)], game_running
 
     def get_snake_view(self, snake_idx: int, view_type: str, view_range: int = 0):
         """

@@ -152,7 +152,7 @@ class Display(ParentView):
 
         pygame.time.set_timer(EVENT_GAME_STARTED, 0)
 
-        calculate_score = lambda x, y, z: 0
+        calculate_score = lambda x, y, z, p, q, r: 0
 
         simulation = Simulation(calculate_score, not self.human_playing)
 

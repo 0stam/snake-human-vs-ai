@@ -110,6 +110,9 @@ class Simulation:
                 if i == j:
                     continue
 
+                if not other:
+                    continue
+
                 if moves[j][0]:
                     if moves[j][0] > 0:
                         if snake[0][0] > other[0][0] and move[0] < 0:

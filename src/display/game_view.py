@@ -7,7 +7,7 @@ import keras
 from src.model.model_utils import get_model_moves
 from src.simulation.simulation import Field, Simulation, Vector2
 from src.display.view import View
-from src.display.constants import EVENT_GAME_FINISHED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_TICK, EVENT_POSSIBLE_HUMAN_TIMEOUT
+from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAMEPAD_LOCK_TIMEOUT, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_TICK, EVENT_POSSIBLE_HUMAN_TIMEOUT
 
 
 class GameView(View):
@@ -17,6 +17,7 @@ class GameView(View):
         Field.EMPTY: "black",
         Field.WALL: "gray",
         Field.FOOD: "purple",
+        "empty_grid": pygame.Color(20, 20, 20)
     }
 
     SNAKE_HUE_START = 80
@@ -35,6 +36,13 @@ class GameView(View):
         pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d,
         pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT
     }
+
+    GAMEPAD_DEADZONE = 0.3 ** 2  # Square for faster distance comparisons
+    GAMEPAD_DEADZONE_RATIOS = [1.2, 1.3, 1.5]
+    GAMEPAD_RATIO_THRESHOLDS = [0.7 ** 2, 0.5 ** 2, 0]
+    GAMEPAD_AXES_HORIZONTAL = {0, 2}
+    GAMEPAD_AXES_VERTICAL = {1, 3}
+    GAMEPAD_OPPOSITE_LOCK_TIMEOUT = 100
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,6 +72,13 @@ class GameView(View):
         self.game_started = not human_playing
         self.input_queue: deque[Vector2] = deque(maxlen=2)
 
+        if pygame.joystick.get_count():
+            self.gamepad = pygame.Joystick(0)
+        else:
+            self.gamepad = None
+
+        self.locked_gamepad_move = (0, 0)
+
         if self.game_started:
             pygame.time.set_timer(EVENT_TICK, self.tick_time)
         else:
@@ -77,16 +92,39 @@ class GameView(View):
     def process(self, delta: float, events: list[pygame.Event]) -> None:
         super().process(delta, events)
 
+        # Test joystick
+#        if pygame.joystick.get_count():
+#            joystick = pygame.joystick.Joystick(0)
+#
+#            print("Axes:")
+#
+#            for i in range(joystick.get_numaxes()):
+#                print(joystick.get_axis(i))
+#
+#            print("Buttons:")
+#
+#            for i in range(joystick.get_numbuttons()):
+#                print(i, joystick.get_button(i))
+#
+#            print("Hats:")
+#
+#            for i in range(joystick.get_numhats()):
+#                print(joystick.get_hat(i))
+#        else:
+#            print("Joystick unavailable")
+
+
         if not self.simulation:
             self.screen.blit(self.surface)
             return
 
+        self._handle_human_moves(events, self.game_started)
+
         if not self.game_started:
             if self.human_playing:
                 for event in events:
-                    if event.type == pygame.KEYDOWN and event.key in self.GAME_INPUT_KEYS:
+                    if self.input_queue:
                         self.game_started = True
-                        self._handle_human_moves(events)
 
                         pygame.event.post(pygame.Event(EVENT_TICK))
 
@@ -102,8 +140,6 @@ class GameView(View):
 
             self.screen.blit(self.surface)
             return
-
-        self._handle_human_moves(events)
 
         for event in events:
             if event.type == EVENT_TICK:
@@ -201,14 +237,24 @@ class GameView(View):
                 offset_x = margin_x
                 offset_y = margin_y
 
+                if self.human_playing and (x + (1 if y % 2 else 0)) % 2:
+                    pygame.draw.rect(
+                        self.surface,
+                        self.COLOR_MAP["empty_grid"],
+                        [offset_x + x * tile_size, offset_y + y * tile_size, size, size]
+                    )
+
                 if simulation.board[x, y] == Field.FOOD:
                     size = apple_size
                     offset_x += apple_offset
                     offset_y += apple_offset
 
+                if simulation.board[x, y] in {Field.SNAKE_BODY, Field.SNAKE_HEAD, Field.EMPTY}:
+                    continue
+
                 pygame.draw.rect(
                     self.surface,
-                    self.COLOR_MAP.get(simulation.board[x, y], self.COLOR_MAP[Field.EMPTY]),
+                    self.COLOR_MAP[simulation.board[x, y]],
                     [offset_x + x * tile_size, offset_y + y * tile_size, size, size]
                 )
 
@@ -279,7 +325,7 @@ class GameView(View):
         )
 
 
-    def _handle_human_moves(self, events: list[pygame.Event]) -> None:
+    def _handle_human_moves(self, events: list[pygame.Event], discard_forward: bool=True) -> None:
         actual_last_move = self.simulation.previous_moves[0]
 
         if self.input_queue:
@@ -287,29 +333,53 @@ class GameView(View):
         else:
             prev_move = actual_last_move
 
+        input_moves = []
+
+        joystick_move = self.get_joystick_move(prev_move)
+
+        if joystick_move != (0, 0):
+            input_moves.append(joystick_move)
+
         for event in events:
-            if event.type != pygame.KEYDOWN:
-                continue
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_d, pygame.K_RIGHT):
+                    input_moves.append((1, 0))
+                elif event.key in (pygame.K_a, pygame.K_LEFT):
+                    input_moves.append((-1, 0))
+                elif event.key in (pygame.K_w, pygame.K_UP):
+                    input_moves.append((0, -1))
+                elif event.key in (pygame.K_s, pygame.K_DOWN):
+                    input_moves.append((0, 1))
 
-            new_move = (0, 0)
-            
-            if event.key in (pygame.K_d, pygame.K_RIGHT):
-                new_move = (1, 0)
-            elif event.key in (pygame.K_a, pygame.K_LEFT):
-                new_move = (-1, 0)
-            elif event.key in (pygame.K_w, pygame.K_UP):
-                new_move = (0, -1)
-            elif event.key in (pygame.K_s, pygame.K_DOWN):
-                new_move = (0, 1)
+            if event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 1:
+                    input_moves.append((1, 0))
+                elif event.button == 3:
+                    input_moves.append((-1, 0))
+                elif event.button == 4:
+                    input_moves.append((0, -1))
+                elif event.button == 0:
+                    input_moves.append((0, 1))
 
-            if new_move == (0, 0):
-                continue
+            if event.type == pygame.JOYHATMOTION:
+                if event.value != (0, 0):
+                    if event.value[0]:
+                        input_moves.append((event.value[0], 0))
+                    else:
+                        input_moves.append((0, -event.value[1]))
 
+            if event.type == EVENT_GAMEPAD_LOCK_TIMEOUT:
+                self.locked_gamepad_move = (0, 0)
+
+        for new_move in input_moves:
             if new_move[0] == -prev_move[0] and new_move[1] == -prev_move[1]:
                 self.input_queue.clear()
-                self.input_queue.append(new_move)
+                print("Input buffer cleared because of oposite move")
 
             if len(self.input_queue) < self.input_queue.maxlen:
+                if discard_forward and new_move == prev_move:
+                    continue
+
                 self.input_queue.append(new_move)
                 prev_move = new_move
 
@@ -318,6 +388,57 @@ class GameView(View):
 
             if actual_next_x == -actual_last_move[0] and actual_next_y == -actual_last_move[1]:
                 self.input_queue.clear()
+
+    def get_joystick_move(self, last_move: Vector2) -> Vector2:
+        if not self.gamepad:
+            return (0, 0)
+
+        joystick_x = 0
+        joystick_y = 0
+
+        abs_x = 0
+        abs_y = 0
+
+        for axis in self.GAMEPAD_AXES_HORIZONTAL:
+            val = self.gamepad.get_axis(axis)
+            abs_val = abs(val)
+
+            if abs_val > abs_x:
+                joystick_x = val
+                abs_x = abs_val
+
+        for axis in self.GAMEPAD_AXES_VERTICAL:
+            val = self.gamepad.get_axis(axis)
+            abs_val = abs(val)
+
+            if abs_val > abs_y:
+                joystick_y = val
+                abs_y = abs_val
+
+        len_squared = joystick_x ** 2 + joystick_y ** 2
+
+        if len_squared <= self.GAMEPAD_DEADZONE:
+            return (0, 0)
+
+        greater, smaller = (abs_x, abs_y) if abs_x > abs_y else (abs_y, abs_x)
+        
+        for threshold, ratio in zip(self.GAMEPAD_RATIO_THRESHOLDS, self.GAMEPAD_DEADZONE_RATIOS):
+            if len_squared >= threshold:
+                if smaller != 0 and greater / smaller <= ratio:
+                    return (0, 0)
+
+        if abs_x > abs_y:
+            move = (1, 0) if joystick_x > 0 else (-1, 0)
+        else:
+            move = (0, 1) if joystick_y > 0 else (0, -1)
+
+        if move == self.locked_gamepad_move:
+            return (0, 0)
+
+        self.locked_gamepad_move = (-move[0], -move[1])
+        pygame.time.set_timer(EVENT_GAMEPAD_LOCK_TIMEOUT, self.GAMEPAD_OPPOSITE_LOCK_TIMEOUT, 1)
+
+        return move
 
     def _get_ai_moves(
         self,

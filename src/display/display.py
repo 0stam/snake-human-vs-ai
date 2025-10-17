@@ -21,7 +21,8 @@ from src.model.model_utils import get_model_moves
 
 class Display(ParentView):
     PROMPT_IDLE = "Press any key to start"
-    PROMPT_MOVE = "WSAD / Arrows to move"
+    PROMPT_MOVE_KEYBOARD = "WSAD / Arrows to move"
+    PROMPT_MOVE_GAMEPAD = "D-PAD / Joystick to move"
 
     CHR_FILLED_POINT = u"\u25CF"
     CHR_EMPTY_POINT = u"\u25CB"
@@ -34,6 +35,8 @@ class Display(ParentView):
     AI_WON = "AI took your job!"
 
     NEW_GAME_WAIT_TIME = 2000
+
+    GAME_STARTING_INPUTS = {pygame.KEYDOWN, pygame.JOYBUTTONDOWN, pygame.JOYHATMOTION}
 
     def __init__(self, model_config: dict[str, dict]) -> None:
         super().__init__()
@@ -130,7 +133,7 @@ class Display(ParentView):
                 self._start_game()
                 continue
 
-            if not self.human_playing and event.type == pygame.KEYDOWN:
+            if not self.human_playing and (event.type in self.GAME_STARTING_INPUTS):
                 self.human_playing = True
 
                 self._reset_curr_score()
@@ -172,7 +175,11 @@ class Display(ParentView):
 
         if self.human_playing:
             self.center_label.text = ""
-            self.bottom_label.text = self.PROMPT_MOVE
+
+            if pygame.joystick.get_count():
+                self.bottom_label.text = self.PROMPT_MOVE_GAMEPAD
+            else:
+                self.bottom_label.text = self.PROMPT_MOVE_KEYBOARD
         else:
             self.center_label.text = self.PROMPT_IDLE
             self.bottom_label.text = ""

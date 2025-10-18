@@ -29,6 +29,8 @@ Vector2 = tuple[int, int]
 VALID_DIRECTIONS = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 DIAGONAL_DIRECTIONS = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
 
+SURVIVING_FIELDS = {Field.EMPTY, Field.FOOD}
+
 
 class Simulation:
     def __init__(self, calculate_score: Callable[["Simulation", bool, bool, int, int, int], float], use_timeout: bool=False) -> None:
@@ -320,11 +322,20 @@ class Simulation:
         return np.array(result)
 
     def get_legal_moves(self, snake_idx: int) -> list[Vector2]:
-        moves = [(1, 0), (-1, 0), (0, -1), (0, 1)]
-
         prev_x, prev_y = self.previous_moves[snake_idx]
         bad_move = (-prev_x, -prev_y)
-        return [move for move in moves if move != bad_move]
+
+        return [move for move in VALID_DIRECTIONS if move != bad_move]
+
+    def get_surviving_moves(self, snake_idx: int) -> list[Vector2]:
+        if not self.snakes[snake_idx]:
+            return self.get_legal_moves(snake_idx)
+
+        head_x, head_y = self.snakes[snake_idx][0]
+
+        result = [move for move in VALID_DIRECTIONS if self.board[head_x + move[0], head_y + move[1]] in SURVIVING_FIELDS]
+
+        return result if result else self.get_legal_moves(snake_idx)
 
     @property
     def n_snakes(self):

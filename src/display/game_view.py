@@ -37,12 +37,12 @@ class GameView(View):
         pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT
     }
 
-    GAMEPAD_DEADZONE = 0.3 ** 2  # Square for faster distance comparisons
+    GAMEPAD_DEADZONE = 0.25 ** 2  # Square for faster distance comparisons
     GAMEPAD_DEADZONE_RATIOS = [1.2, 1.3, 1.5]
     GAMEPAD_RATIO_THRESHOLDS = [0.7 ** 2, 0.5 ** 2, 0]
     GAMEPAD_AXES_HORIZONTAL = {0, 2}
     GAMEPAD_AXES_VERTICAL = {1, 3}
-    GAMEPAD_OPPOSITE_LOCK_TIMEOUT = 100
+    GAMEPAD_OPPOSITE_LOCK_TIMEOUT = 200
 
     def __init__(self) -> None:
         super().__init__()
@@ -452,7 +452,7 @@ class GameView(View):
         ]
 
         possible_moves = [
-            self.simulation.get_legal_moves(i) for i in range(start, self.simulation.n_snakes)
+            self.simulation.get_surviving_moves(i) for i in range(start, self.simulation.n_snakes)
         ]
 
         return get_model_moves(self.model, states, possible_moves, self.simulation.snakes_alive[start:], True)

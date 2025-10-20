@@ -61,7 +61,6 @@ class Simulation:
         self.next_head_positions: np.ndarray = np.stack([
             [np.array([1, 0, -1, 0]) + snake[0][0], np.array([0, 1, 0, -1]) + snake[0][1]] for snake in self.snakes
         ])
-        print(self.next_head_positions)
 
         self.tmp_surviving_fields = np.empty((4), dtype=int)  # Workaround for garbage collector
 
@@ -341,9 +340,6 @@ class Simulation:
     def get_surviving_moves(self, snake_idx: int) -> list[Vector2]:
         if not self.snakes[snake_idx]:
             return self.get_legal_moves(snake_idx)
-
-        print(self.next_head_positions[snake_idx])
-        #self.tmp_surviving_fields = self.board[self.next_head_positions[snake_idx][0], self.next_head_positions[snake_idx][1]]
 
         result = [VALID_DIRECTIONS[i] for i in range(len(VALID_DIRECTIONS)) if self.board[self.next_head_positions[snake_idx][0][i], self.next_head_positions[snake_idx][1][i]] in SURVIVING_FIELDS]
 

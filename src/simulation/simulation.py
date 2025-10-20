@@ -10,6 +10,7 @@ std_handler = logging.StreamHandler()
 std_handler.setLevel(logging.DEBUG)
 logger.addHandler(std_handler)
 
+from keras.src.ops.core import dtype
 import numpy as np
 
 
@@ -56,6 +57,13 @@ class Simulation:
         self.previous_moves: list[Vector2] = []
 
         self._place_snakes(snake_count, tail_len)
+
+        self.next_head_positions: np.ndarray = np.stack([
+            [np.array([1, 0, -1, 0]) + snake[0][0], np.array([0, 1, 0, -1]) + snake[0][1]] for snake in self.snakes
+        ])
+        print(self.next_head_positions)
+
+        self.tmp_surviving_fields = np.empty((4), dtype=int)  # Workaround for garbage collector
 
         self.food_count: int = food_count
         self.tail_len: int = tail_len
@@ -143,6 +151,9 @@ class Simulation:
             self.previous_moves[i] = (move_x, move_y)
 
             snake.appendleft((head_x + move_x, head_y + move_y))
+
+            self.next_head_positions[i][0] += move_x
+            self.next_head_positions[i][1] += move_y
 
             self.board[snake[1]] = Field.SNAKE_BODY  # Prevent snakes killing each other when one of them extends
 
@@ -331,9 +342,10 @@ class Simulation:
         if not self.snakes[snake_idx]:
             return self.get_legal_moves(snake_idx)
 
-        head_x, head_y = self.snakes[snake_idx][0]
+        print(self.next_head_positions[snake_idx])
+        #self.tmp_surviving_fields = self.board[self.next_head_positions[snake_idx][0], self.next_head_positions[snake_idx][1]]
 
-        result = [move for move in VALID_DIRECTIONS if self.board[head_x + move[0], head_y + move[1]] in SURVIVING_FIELDS]
+        result = [VALID_DIRECTIONS[i] for i in range(len(VALID_DIRECTIONS)) if self.board[self.next_head_positions[snake_idx][0][i], self.next_head_positions[snake_idx][1][i]] in SURVIVING_FIELDS]
 
         return result if result else self.get_legal_moves(snake_idx)
 

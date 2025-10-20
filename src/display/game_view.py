@@ -17,7 +17,7 @@ class GameView(View):
         Field.EMPTY: "black",
         Field.WALL: "gray",
         Field.FOOD: "purple",
-        "empty_grid": pygame.Color(20, 20, 20)
+        "empty_grid": pygame.Color(10, 10, 10)
     }
 
     SNAKE_HUE_START = 80

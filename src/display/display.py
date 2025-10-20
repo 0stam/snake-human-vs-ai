@@ -25,6 +25,8 @@ class Display(ParentView):
     PROMPT_MOVE_KEYBOARD = "WSAD / Arrows to move"
     PROMPT_MOVE_GAMEPAD = "D-PAD / Joystick to move"
 
+    PROMPT_PLAYER_COLOR = "Player is green"
+
     CHR_FILLED_POINT = u"\u25CF"
     CHR_EMPTY_POINT = u"\u25CB"
 
@@ -92,6 +94,10 @@ class Display(ParentView):
 
         self.bottom_label: Text = self.text_factory.create("", "bottom_center", (0, -100), 50)
         self.add_view(self.bottom_label)
+
+        self.bottom_label_above: Text = self.text_factory.create("", "bottom_center", (0, -160), 50)
+        self.bottom_label_above.color = (153, 229, 0)
+        self.add_view(self.bottom_label_above)
 
         self.human_score_label: Text = self.text_factory.create("", "top_left", (10, 10), 50)
         self.add_view(self.human_score_label)
@@ -185,9 +191,11 @@ class Display(ParentView):
                 self.bottom_label.text = self.PROMPT_MOVE_GAMEPAD
             else:
                 self.bottom_label.text = self.PROMPT_MOVE_KEYBOARD
+            self.bottom_label_above.text = self.PROMPT_PLAYER_COLOR
         else:
             self.center_label.text = self.PROMPT_IDLE
             self.bottom_label.text = ""
+            self.bottom_label_above.text = ""
             self._update_score_labels(False)
 
     def _reset_curr_score(self):

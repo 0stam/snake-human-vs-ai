@@ -16,13 +16,14 @@ class Text(View):
         self.offset = offset
         self.font = font
         self.f_size = f_size
+        self.color: tuple[int, int, int] = (255, 255, 255)
 
         self.text_surface: pygame.Surface = None
         self.text_rect: pygame.Rect = None
         self.screen: pygame.Surface = pygame.display.get_surface()
 
     def _display(self):
-        self.text_surface, self.text_rect = self.font.render(self.text, (255, 255, 255), size=self.f_size)
+        self.text_surface, self.text_rect = self.font.render(self.text, self.color, size=self.f_size)
 
     def init_gui(self) -> None:
         super().init_gui()

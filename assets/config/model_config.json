@@ -1,7 +1,7 @@
 {
     "demo": {
-        "file": "r15_full_rb_1_3_e_200000_lr_0_001_timeout_conv_battle_food_progress_v0_87_snapshot.keras",
-        "view_type": "full",
+        "file": "model.tflite",
+        "view_type": "diagonal",
         "view_range": 15,
         "snake_count": 3,
         "food_count": 2,
@@ -9,12 +9,12 @@
         "tps": 60
     },
     "normal": {
-        "file": "r15_full_rb_1_3_e_200000_lr_0_001_timeout_conv_battle_food_progress_v0_87_snapshot.keras",
-        "view_type": "full",
+        "file": "model.tflite",
+        "view_type": "diagonal",
         "view_range": 15,
         "snake_count": 2,
         "food_count": 2,
         "fps": 4,
-        "tps": 25
+        "tps": 60
     }
 }

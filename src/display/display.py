@@ -9,6 +9,7 @@ from pygame.event import Event
 import keras
 import numpy as np
 
+from src.model.litert_wrapper import LiteRTWrapper
 from src.display.background import Background
 from src.display.text import Text, TextFactory
 from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAME_STARTED, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT
@@ -54,7 +55,7 @@ class Display(ParentView):
 
         self.ai_model_name = "demo"
         self.curr_model_name = "normal"
-        self.model = None
+        self.model: LiteRTWrapper = None
         self.loaded_model_filename = ""
 
     def init_gui(self, size: tuple[int, int]=(0,0)) -> None:
@@ -159,9 +160,13 @@ class Display(ParentView):
 
         simulation = Simulation(calculate_score, not self.human_playing)
 
+        max_batch_size = config["snake_count"] * 3
+
         if self.loaded_model_filename != config["file"]:
-            self.model = keras.models.load_model(Path("models") / config["file"])
+            self.model = LiteRTWrapper(Path("assets/models") / config["file"], max_batch_size)
             self.loaded_model_filename = config["file"]
+        else:
+            self.model.set_max_batch_size(max_batch_size)
 
         view_type = config["view_type"]
         view_range = config["view_range"]

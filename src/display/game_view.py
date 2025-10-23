@@ -11,13 +11,13 @@ from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAMEPAD_LOCK_TIMEOU
 
 
 class GameView(View):
-    TIMEOUT_DURATION = 20_000
+    TIMEOUT_DURATION = 30_000
 
     COLOR_MAP = {
         Field.EMPTY: "black",
         Field.WALL: "gray",
         Field.FOOD: "purple",
-        "empty_grid": pygame.Color(10, 10, 10)
+        "empty_grid": pygame.Color(20, 20, 20)
     }
 
     SNAKE_HUE_START = 80

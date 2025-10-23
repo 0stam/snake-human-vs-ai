@@ -149,6 +149,7 @@ class Display(ParentView):
 
             if event.type == EVENT_HUMAN_STARTED:
                 self.bottom_label.text = ""
+                self.bottom_label_above.text = ""
 
             if event.type == EVENT_HUMAN_TIMEOUT:
                 self.human_playing = False

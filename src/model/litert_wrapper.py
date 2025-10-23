@@ -17,7 +17,7 @@ class LiteRTWrapper:
         self.max_batch_size = max_batch_size
 
         input_details = self.interpreter.get_input_details()[0]
-        self.interpreter.resize_tensor_input(input_details["index"], (max_batch_size, input_details["shape"][1]))
+        self.interpreter.resize_tensor_input(input_details["index"], (max_batch_size, *input_details["shape"][1:]))
         self.interpreter.allocate_tensors()
 
     def predict(self, x: np.ndarray, *args, **kwargs):

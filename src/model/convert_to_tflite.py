@@ -1,10 +1,11 @@
+import sys
 from pathlib import Path
 
 import tensorflow as tf
 import keras
 
-input_path = Path("models/r15_diagonal_rb_1_3_e_100000_lr_0_001_timeout_scaling_battle_big_aggresive_v0_86_snapshot.keras")
-output_path = Path("assets/models/model.tflite")
+input_path = sys.argv[1]
+output_path = sys.argv[2]
 
 keras_model = keras.models.load_model(input_path)
 converter = tf.lite.TFLiteConverter.from_keras_model(keras_model)

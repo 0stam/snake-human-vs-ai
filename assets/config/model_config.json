@@ -16,5 +16,14 @@
         "food_count": 2,
         "fps": 4,
         "tps": 60
+    },
+    "solo": {
+        "file": "model_solo.tflite",
+        "view_type": "diagonal",
+        "view_range": 7,
+        "snake_count": 1,
+        "food_count": 2,
+        "fps": 15,
+        "tps": 60
     }
 }

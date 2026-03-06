@@ -7,7 +7,7 @@ import keras
 from src.model.model_utils import get_model_moves
 from src.simulation.simulation import Field, Simulation, Vector2
 from src.display.view import View
-from src.display.constants import EVENT_GAME_FINISHED, EVENT_GAMEPAD_LOCK_TIMEOUT, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_TICK, EVENT_POSSIBLE_HUMAN_TIMEOUT
+from src.display.constants import EVENT_COYOTE_TIME_EXPIRED, EVENT_GAME_FINISHED, EVENT_GAMEPAD_LOCK_TIMEOUT, EVENT_HUMAN_STARTED, EVENT_HUMAN_TIMEOUT, EVENT_TICK, EVENT_POSSIBLE_HUMAN_TIMEOUT
 
 
 class GameView(View):
@@ -68,9 +68,16 @@ class GameView(View):
         self.ticks_remaining = 1
 
         self.previous_snakes: list[list|deque] = [list(s)[1:] for s in simulation.snakes]
+        self.next_snakes: list[list|deque] = [list(s) for s in simulation.snakes]
 
         self.game_started = not human_playing
         self.input_queue: deque[Vector2] = deque(maxlen=2)
+
+        self.cached_moves: list[Vector2] = []  # Avoids calculating AI moves twice when coyote time triggers
+
+        self.use_coyote_time = human_playing
+        self.coyote_time_active = False
+        self.coyote_time = int(1000 / turns_per_second / 8.5)
 
         if pygame.joystick.get_count():
             self.gamepad = pygame.Joystick(0)
@@ -140,10 +147,21 @@ class GameView(View):
 
             self.screen.blit(self.surface)
             return
+        
+        if self.coyote_time_active and self.input_queue:
+            self.cached_moves[0] = self.input_queue.popleft()
+            self.coyote_time_active = False
+            pygame.time.set_timer(EVENT_COYOTE_TIME_EXPIRED, 0)
+            self.next_turn()
 
         for event in events:
             if event.type == EVENT_TICK:
                 self.ticks_remaining -= 1
+            
+            if event.type == EVENT_COYOTE_TIME_EXPIRED:
+                if self.coyote_time_active:
+                    self.coyote_time_active = False
+                    self.next_turn()
 
         if self.ticks_remaining > 0:
             self._display(self.simulation, (self.ticks_per_turn - self.ticks_remaining) / (self.ticks_per_turn - 1))
@@ -152,19 +170,34 @@ class GameView(View):
 
         self.ticks_remaining = self.ticks_per_turn
 
-        moves = []
+        self.cached_moves = []
 
         if self.human_playing:
             if self.input_queue:
-                moves.append(self.input_queue.popleft())
+                self.cached_moves.append(self.input_queue.popleft())
             else:
-                moves.append(self.simulation.previous_moves[0])
+                self.cached_moves.append(self.simulation.previous_moves[0])
 
-        moves += self._get_ai_moves(self.human_playing)
+                if self.use_coyote_time:
+                    self.coyote_time_active = True
+                    pygame.time.set_timer(EVENT_COYOTE_TIME_EXPIRED, self.coyote_time, loops=1)
+
+        self.cached_moves += self._get_ai_moves(self.human_playing)
 
         self.previous_snakes = [deque(s) for s in self.simulation.snakes]
 
-        _, sim_running = self.simulation.next(moves)
+        if self.coyote_time_active:
+            self.next_snakes = self.simulation.get_next_snakes_pos_estimation(self.cached_moves)
+        else:
+            self.next_turn()
+
+        self._display(self.simulation, 0)
+        self.screen.blit(self.surface)
+    
+    def next_turn(self) -> None:
+        _, sim_running = self.simulation.next(self.cached_moves)
+
+        self.next_snakes = [deque(s) for s in self.simulation.snakes]
 
         if self.human_playing and not self.simulation.snakes_alive[0]:
             sim_running = False
@@ -173,9 +206,6 @@ class GameView(View):
             pygame.event.post(pygame.Event(EVENT_GAME_FINISHED))
 
         self.simulation_running = sim_running
-
-        self._display(self.simulation, 0)
-        self.screen.blit(self.surface)
 
     def _display(self, simulation: Simulation, trans_perc: float) -> None:
         self.surface.fill((0, 0, 0, 0))
@@ -209,7 +239,7 @@ class GameView(View):
 
         hue_step = (self.SNAKE_HUE_END - self.SNAKE_HUE_START) / ((len(simulation.snakes) - 1) or 1)
 
-        for i in range(len(simulation.snakes)):
+        for i in range(len(self.next_snakes)):
             head_color = pygame.Color(0, 0, 0)
             body_color = pygame.Color(0, 0, 0)
 
@@ -259,7 +289,7 @@ class GameView(View):
                 )
 
         # Draw snakes
-        for snake, previous_snake, (head_color, body_color) in zip(simulation.snakes, self.previous_snakes, snake_colors):
+        for snake, previous_snake, (head_color, body_color) in zip(self.next_snakes, self.previous_snakes, snake_colors):
             if not snake:
                 continue
 
@@ -323,6 +353,7 @@ class GameView(View):
             color,
             [x_start, y_start, x_size, y_size]
         )
+
 
 
     def _handle_human_moves(self, events: list[pygame.Event], discard_forward: bool=True) -> None:

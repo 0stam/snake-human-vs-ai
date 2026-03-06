@@ -345,6 +345,29 @@ class Simulation:
 
         return result if result else self.get_legal_moves(snake_idx)
 
+    def get_next_snakes_pos_estimation(self, moves: list[Vector2]) -> list[deque | list]:
+        next_snakes = []
+
+        for snake, move in zip(self.snakes, moves):
+            if not snake:
+                next_snakes.append(deque())
+                continue
+
+            head_x, head_y = snake[0]
+            move_x, move_y = move
+
+            new_head = (head_x + move_x, head_y + move_y)
+
+            new_snake = deque(snake)
+            new_snake.appendleft(new_head)
+
+            if self.board[new_head] != Field.FOOD:
+                new_snake.pop()
+
+            next_snakes.append(new_snake)
+
+        return next_snakes 
+
     @property
     def n_snakes(self):
         return len(self.snakes)
